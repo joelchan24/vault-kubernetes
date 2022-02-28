@@ -1,0 +1,149 @@
+
+global:
+  enabled: true
+  tlsDisable: false
+
+injector:
+  enabled: false
+
+service:
+  name: vault
+  type: ClusterIP
+  enabled: true
+  externalTrafficPolicy: Cluster
+  port: 8200
+  targetPort: 8200
+  annotations: {}
+
+server:
+  standalone:
+    enabled: false
+  image:
+    repository: hashicorp/vault-enterprise
+    tag: 1.9-ent
+  resources:
+    requests:
+      memory: 120Mi
+      cpu: 100m
+    limits:
+      memory: 120Mi
+      cpu: 100m
+  logLevel: "debug"
+  logFormat: ""
+  affinity: ""
+  livenessProbe:
+    enabled: false
+    path: "/v1/sys/health?standbyok=true"
+    failureThreshold: 2
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 3
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+    failureThreshold: 2
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    successThreshold: 1
+    timeoutSeconds: 3
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-primary-secrets/tls.ca
+    VAULT_SKIP_VERIFY: true
+    VAULT_LICENSE_PATH: /vault/userconfig/vault-primary-secrets/vault.lic
+  extraVolumes:
+    - type: secret
+      name: vault-primary-secrets
+  ha:
+    enabled: true
+    replicas: 5
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+
+        ui = true
+        license_path = "/vault/userconfig/vault-primary-secrets/vault.lic"
+
+        listener "tcp" {
+          tls_disable = false
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-primary-secrets/tls.key"
+          tls_client_ca_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr = "https://vault-primary-0.vault-primary-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+            leader_client_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-primary-secrets/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-primary-1.vault-primary-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+            leader_client_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-primary-secrets/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-primary-2.vault-primary-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+            leader_client_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-primary-secrets/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-primary-3.vault-primary-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+            leader_client_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-primary-secrets/tls.key"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-primary-4.vault-primary-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-primary-secrets/tls.ca"
+            leader_client_cert_file = "/vault/userconfig/vault-primary-secrets/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-primary-secrets/tls.key"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+  # postStart:
+  #     - "/bin/sh"
+  #     - "-c"
+  #     - |
+  #        sleep 5
+  #        if [ "$HOSTNAME" = vault-primary-0 ]; then
+  #            vault operator init | tee /tmp/vault.init > /dev/null
+  #            cat /tmp/vault.init | grep '^Unseal' | awk '{print $4}' | for key in $(cat -); do
+  #               vault operator unseal $key
+  #            done
+
+  #        else
+  #             echo "Remove master keys from disk"
+  #        fi
+
+  dataStorage:
+    enabled: true
+    size: "1Gi"
+    storageClass: null
+    accessMode: ReadWriteOnce
+  auditStorage:
+    enabled: true
+    size: "1Gi"
+    storageClass: null
+    accessMode: ReadWriteOnce
+
+
+
+serviceAccount:
+  create: true
+  name: "vault-sa"
+  annotations: {}
+
+ui:
+  enabled: true
+  serviceType: "ClusterIP"
+  externalPort: 8200
